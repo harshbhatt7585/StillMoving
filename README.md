@@ -49,5 +49,3 @@ Open to use
 ## Contact
 
 Harsh Bhatt - harshbhatt7585@gmail.com
-
-Project Link: [https://github.com/yourusername/still-moving]
