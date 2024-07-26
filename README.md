@@ -24,10 +24,11 @@ Still-Moving is a novel framework for customizing text-to-video (T2V) generation
 
 ## Implementation Details
 
-- Motion Adapters: LoRA layers applied to temporal attention blocks
-- Spatial Adapters: LoRA layers added after injected customized T2I layers
+- Motion Adapters: LoRA layers applied to temporal attention blocks (✔️ Done)
+- Spatial Adapters: LoRA layers added after injected customized T2I layers (✔️ Done)
 - Training process: Two-step training for Motion and Spatial Adapters
 - Supported models: [List the T2V models you've implemented]
+
 
 ## Contributing
 
