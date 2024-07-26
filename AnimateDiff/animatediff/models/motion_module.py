@@ -46,7 +46,7 @@ def get_motion_module(in_channels, motion_module_type: str, motion_module_kwargs
         raise ValueError
 
 
-class LoRALayer(nn.Module):
+class MotionAdapter(nn.Module):
     def __init__(self, in_features, out_features, rank=4):
         super().__init__()
         self.down = nn.Linear(in_features, rank, bias=False)
@@ -56,21 +56,25 @@ class LoRALayer(nn.Module):
         nn.init.normal_(self.down.weight, std=1 / rank)
         nn.init.zeros_(self.up.weight)
 
+    def set_scale(self, value):
+        self.scale = value
+
     def forward(self, x):
+        print(self.scale)
         return self.up(self.down(x)) * self.scale
 
 
-class LoRALinear(nn.Module):
-    def __init__(self, linear_layer, rank=4):
-        super().__init__()
-        self.in_features = linear_layer.in_features
-        self.out_features = linear_layer.out_features
+# class LoRALinear(nn.Module):
+#     def __init__(self, linear_layer, rank=4):
+#         super().__init__()
+#         self.in_features = linear_layer.in_features
+#         self.out_features = linear_layer.out_features
 
-        self.linear = linear_layer
-        self.lora = LoRALayer(self.in_features, self.out_features, rank=rank)
+#         self.linear = linear_layer
+#         self.lora = LoRALayer(self.in_features, self.out_features, rank=rank)
 
-    def forward(self, x):
-        return self.lienar(x) + self.lora(x)
+#     def forward(self, x):
+#         return self.lienar(x) + self.lora(x)
 
 
 class VanillaTemporalModule(nn.Module):
@@ -85,9 +89,10 @@ class VanillaTemporalModule(nn.Module):
         temporal_position_encoding_max_len=24,
         temporal_attention_dim_div=1,
         zero_initialize=True,
+        motion_adapter_scale=1.0,
     ):
         super().__init__()
-
+        print("Motion Adapter Scale", motion_adapter_scale)
         self.temporal_transformer = TemporalTransformer3DModel(
             in_channels=in_channels,
             num_attention_heads=num_attention_heads,
@@ -99,6 +104,7 @@ class VanillaTemporalModule(nn.Module):
             cross_frame_attention_mode=cross_frame_attention_mode,
             temporal_position_encoding=temporal_position_encoding,
             temporal_position_encoding_max_len=temporal_position_encoding_max_len,
+            motion_adapter_scale=motion_adapter_scale,
         )
 
         if zero_initialize:
@@ -143,6 +149,7 @@ class TemporalTransformer3DModel(nn.Module):
         cross_frame_attention_mode=None,
         temporal_position_encoding=False,
         temporal_position_encoding_max_len=24,
+        motion_adapter_scale=1.0,
     ):
         super().__init__()
 
@@ -169,6 +176,7 @@ class TemporalTransformer3DModel(nn.Module):
                     cross_frame_attention_mode=cross_frame_attention_mode,
                     temporal_position_encoding=temporal_position_encoding,
                     temporal_position_encoding_max_len=temporal_position_encoding_max_len,
+                    motion_adapter_scale=motion_adapter_scale,
                 )
                 for d in range(num_layers)
             ]
@@ -233,6 +241,7 @@ class TemporalTransformerBlock(nn.Module):
         cross_frame_attention_mode=None,
         temporal_position_encoding=False,
         temporal_position_encoding_max_len=24,
+        motion_adapter_scale=1.0,
     ):
         super().__init__()
 
@@ -255,6 +264,7 @@ class TemporalTransformerBlock(nn.Module):
                     cross_frame_attention_mode=cross_frame_attention_mode,
                     temporal_position_encoding=temporal_position_encoding,
                     temporal_position_encoding_max_len=temporal_position_encoding_max_len,
+                    motion_adapter_scale=motion_adapter_scale,
                 )
             )
             norms.append(nn.LayerNorm(dim))
@@ -318,6 +328,7 @@ class VersatileAttention(CrossAttention):
         cross_frame_attention_mode=None,
         temporal_position_encoding=False,
         temporal_position_encoding_max_len=24,
+        motion_adapter_scale=1.0,
         *args,
         **kwargs,
     ):
@@ -337,9 +348,16 @@ class VersatileAttention(CrossAttention):
             else None
         )
 
-        self.q_lora = LoRALayer(self.to_q.in_features, self.to_q.out_features)
-        self.k_lora = LoRALayer(self.to_k.in_features, self.to_k.out_features)
-        self.v_lora = LoRALayer(self.to_v.in_features, self.to_v.out_features)
+        self.q_lora = MotionAdapter(self.to_q.in_features, self.to_q.out_features)
+        self.k_lora = MotionAdapter(self.to_k.in_features, self.to_k.out_features)
+        self.v_lora = MotionAdapter(self.to_v.in_features, self.to_v.out_features)
+
+        self.set_motion_adapter_scale(motion_adapter_scale)
+
+    def set_motion_adapter_scale(self, scale):
+        self.q_lora.set_scale(scale)
+        self.k_lora.set_scale(scale)
+        self.v_lora.set_scale(scale)
 
     def extra_repr(self):
         return f"(Module Info) Attention_Mode: {self.attention_mode}, Is_Cross_Attention: {self.is_cross_attention}"

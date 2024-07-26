@@ -38,6 +38,7 @@ from animatediff.data.dataset import WebVid10M
 from animatediff.models.unet import UNet3DConditionModel
 from animatediff.pipelines.pipeline_animation import AnimationPipeline
 from animatediff.utils.util import save_videos_grid, zero_rank_print
+from animatediff.utils.util import load_weights
 
 
 def init_dist(launcher="slurm", backend="nccl", port=29500, **kwargs):
@@ -71,6 +72,13 @@ def init_dist(launcher="slurm", backend="nccl", port=29500, **kwargs):
         raise NotImplementedError(f"Not implemented launcher type: `{launcher}`!")
 
     return local_rank
+
+
+def set_motion_adapter_scale(module, scale):
+    if hasattr(module, "set_motion_adapter_scale"):
+        module.set_motion_adapter_scale(scale)
+    for child in module.children():
+        set_motion_adapter_scale(child, scale)
 
 
 def main(
@@ -165,11 +173,13 @@ def main(
         pretrained_model_path, subfolder="text_encoder"
     )
     if not image_finetune:
+        unet_additional_kwargs["motion_module_kwargs"]["motion_adapter_scale"] = 1.0
         unet = UNet3DConditionModel.from_pretrained_2d(
             pretrained_model_path,
             subfolder="unet",
             unet_additional_kwargs=OmegaConf.to_container(unet_additional_kwargs),
         )
+
     else:
         unet = UNet2DConditionModel.from_pretrained(
             pretrained_model_path, subfolder="unet"
@@ -195,12 +205,33 @@ def main(
     vae.requires_grad_(False)
     text_encoder.requires_grad_(False)
 
+    unet_state_dict = {}
+    motion_module_path = "./models/Motion_Module/mm_sd_v15.ckpt"
+    print(f"load motion module from {motion_module_path}")
+    motion_module_state_dict = torch.load(motion_module_path, map_location="cpu")
+    motion_module_state_dict = (
+        motion_module_state_dict["state_dict"]
+        if "state_dict" in motion_module_state_dict
+        else motion_module_state_dict
+    )
+    unet_state_dict.update(
+        {
+            name: param
+            for name, param in motion_module_state_dict.items()
+            if "motion_modules." in name
+        }
+    )
+    unet_state_dict.pop("animatediff_config", "")
+    missing, unexpected = unet.load_state_dict(unet_state_dict, strict=False)
+    assert len(unexpected) == 0
+    del unet_state_dict
+
     # Set unet trainable parameters
     unet.requires_grad_(False)
     for name, param in unet.named_parameters():
-        print(name)
         for trainable_module_name in trainable_modules:
             if trainable_module_name in name:
+                print("Trainable Module: ", name)
                 param.requires_grad = True
                 break
 
@@ -570,6 +601,7 @@ if __name__ == "__main__":
         "--launcher", type=str, choices=["pytorch", "slurm"], default="pytorch"
     )
     parser.add_argument("--wandb", action="store_true")
+    parser.add_argument("--train_motion_adapter", action="store_true")
     args = parser.parse_args()
 
     name = Path(args.config).stem

@@ -28,8 +28,8 @@ noise_scheduler_kwargs:
   clip_sample:         false
 
 train_data:
-  csv_path:        "/mnt/petrelfs/guoyuwei/projects/datasets/webvid/results_2M_val.csv"
-  video_folder:    "/mnt/petrelfs/guoyuwei/projects/datasets/webvid/2M_val"
+  csv_path:        "/home/harshb/workspace/learnings/StillMoving/AnimateDiff/dataset/train.csv"
+  video_folder:    "/home/harshb/workspace/learnings/StillMoving/AnimateDiff/dataset/videos"
   sample_size:     256
   sample_stride:   4
   sample_n_frames: 16
@@ -44,7 +44,9 @@ validation_data:
   guidance_scale: 8.
 
 trainable_modules:
-  - "motion_modules."
+  - "q_lora."
+  - "k_lora."
+  - "v_lora."
 
 unet_checkpoint_path: ""
 
