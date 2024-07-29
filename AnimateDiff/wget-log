@@ -1,0 +1,6 @@
+--2024-07-26 18:24:24--  https://secta-models.s3.us-east-1.amazonaws.com/1336237.tar?X-Amz-Algorithm=AWS4-HMAC-SHA256
+Resolving secta-models.s3.us-east-1.amazonaws.com (secta-models.s3.us-east-1.amazonaws.com)... 52.217.172.210, 54.231.201.34, 52.217.124.250, ...
+Connecting to secta-models.s3.us-east-1.amazonaws.com (secta-models.s3.us-east-1.amazonaws.com)|52.217.172.210|:443... connected.
+HTTP request sent, awaiting response... 400 Bad Request
+2024-07-26 18:24:25 ERROR 400: Bad Request.
+

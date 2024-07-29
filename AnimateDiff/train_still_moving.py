@@ -120,6 +120,7 @@ def main(
     enable_xformers_memory_efficient_attention: bool = True,
     global_seed: int = 42,
     is_debug: bool = False,
+    motion_adapater_ckpt: str = "",
 ):
     check_min_version("0.10.0.dev0")
 
@@ -173,7 +174,10 @@ def main(
         pretrained_model_path, subfolder="text_encoder"
     )
     if not image_finetune:
-        unet_additional_kwargs["motion_module_kwargs"]["motion_adapter_scale"] = 1.0
+        if args.train_motion_adapter:
+            unet_additional_kwargs["motion_module_kwargs"]["motion_adapter_scale"] = 1.0
+        else:
+            unet_additional_kwargs["motion_module_kwargs"]["motion_adapter_scale"] = 0
         unet = UNet3DConditionModel.from_pretrained_2d(
             pretrained_model_path,
             subfolder="unet",
@@ -221,14 +225,77 @@ def main(
             if "motion_modules." in name
         }
     )
+    if not args.train_motion_adapter:
+        checkpoint = torch.load(
+            "/home/harshb/workspace/learnings/StillMoving/AnimateDiff/outputs/training-2024-07-29T17-53-24/checkpoints/checkpoint.ckpt",
+            map_location="cpu",
+        )
+        # Extract the state dict
+        if "state_dict" in checkpoint:
+            state_dict = checkpoint["state_dict"]
+        else:
+            raise KeyError("state_dict not found in checkpoint")
+
+        # Filter the current unet state dict to get only motion adapter params
+        unet_state_dict = unet.state_dict()
+        motion_adapter_state_dict = {
+            k: v
+            for k, v in unet_state_dict.items()
+            if "q_lora." in k or "k_lora." in k or "v_lora." in k
+        }
+
+        # Update the motion adapter params with loaded state
+        motion_adapter_state_dict.update(
+            {k: v for k, v in state_dict.items() if k in motion_adapter_state_dict}
+        )
+        # Load the updated state dict
+        unet.load_state_dict(motion_adapter_state_dict, strict=False)
+
     unet_state_dict.pop("animatediff_config", "")
     missing, unexpected = unet.load_state_dict(unet_state_dict, strict=False)
     assert len(unexpected) == 0
     del unet_state_dict
 
+    # base model
+    from animatediff.utils.convert_from_ckpt import (
+        convert_ldm_unet_checkpoint,
+        convert_ldm_clip_checkpoint,
+        convert_ldm_vae_checkpoint,
+    )
+
+    dreambooth_model_path = "./models/DreamBooth_LoRA/alex.safetensors"
+    if dreambooth_model_path != "":
+        print(f"load dreambooth model from {dreambooth_model_path}")
+        if dreambooth_model_path.endswith(".safetensors"):
+            dreambooth_state_dict = {}
+            with safe_open(dreambooth_model_path, framework="pt", device="cpu") as f:
+                for key in f.keys():
+                    dreambooth_state_dict[key] = f.get_tensor(key)
+        elif dreambooth_model_path.endswith(".ckpt"):
+            dreambooth_state_dict = torch.load(
+                dreambooth_model_path, map_location="cpu"
+            )
+
+        # 1. vae
+        converted_vae_checkpoint = convert_ldm_vae_checkpoint(
+            dreambooth_state_dict, vae.config
+        )
+        vae.load_state_dict(converted_vae_checkpoint)
+        # 2. unet
+        converted_unet_checkpoint = convert_ldm_unet_checkpoint(
+            dreambooth_state_dict, unet.config
+        )
+        unet.load_state_dict(converted_unet_checkpoint, strict=False)
+        # 3. text_model
+        text_encoder = convert_ldm_clip_checkpoint(dreambooth_state_dict)
+        del dreambooth_state_dict
+
     # Set unet trainable parameters
     unet.requires_grad_(False)
+
     for name, param in unet.named_parameters():
+        # load extra checkpoint params
+
         for trainable_module_name in trainable_modules:
             if trainable_module_name in name:
                 print("Trainable Module: ", name)
@@ -267,8 +334,15 @@ def main(
     vae.to(local_rank)
     text_encoder.to(local_rank)
 
-    # Get the training dataset
-    train_dataset = WebVid10M(**train_data, is_image=image_finetune)
+    if args.train_motion_adapter:
+        # Get the training dataset
+        train_dataset = WebVid10M(
+            **train_data, is_image=image_finetune, frozen_videos=True
+        )
+    else:
+        train_dataset = WebVid10M(
+            **train_data, is_image=image_finetune, number_of_samples=40
+        )
     distributed_sampler = DistributedSampler(
         train_dataset,
         num_replicas=num_processes,
@@ -499,11 +573,26 @@ def main(
                 or step == len(train_dataloader) - 1
             ):
                 save_path = os.path.join(output_dir, f"checkpoints")
-                state_dict = {
-                    "epoch": epoch,
-                    "global_step": global_step,
-                    "state_dict": unet.state_dict(),
-                }
+
+                if args.train_motion_adapter:
+                    filtered_state_dict = {
+                        k: v
+                        for k, v in unet.state_dict().items()
+                        if "q_lora." in k or "k_lora." in k or "v_lora." in k
+                    }
+                    state_dict = {
+                        "epoch": epoch,
+                        "global_step": global_step,
+                        "state_dict": filtered_state_dict,
+                    }
+                    print("Motion Datation ckpt is getting stored")
+                else:
+                    state_dict = {
+                        "epoch": epoch,
+                        "global_step": global_step,
+                        "state_dict": unet.state_dict(),
+                    }
+
                 if step == len(train_dataloader) - 1:
                     torch.save(
                         state_dict,
@@ -602,6 +691,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--wandb", action="store_true")
     parser.add_argument("--train_motion_adapter", action="store_true")
+    parser.add_argument("--train_spatial_adapter", action="store_true")
     args = parser.parse_args()
 
     name = Path(args.config).stem

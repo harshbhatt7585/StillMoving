@@ -18,10 +18,15 @@ class WebVid10M(Dataset):
         sample_stride=4,
         sample_n_frames=16,
         is_image=False,
+        frozen_videos=False,
+        number_of_samples=None,
     ):
         zero_rank_print(f"loading annotations from {csv_path} ...")
         with open(csv_path, "r") as csvfile:
             self.dataset = list(csv.DictReader(csvfile))
+
+        if number_of_samples:
+            self.dataset = self.dataset[:number_of_samples]
         self.length = len(self.dataset)
         zero_rank_print(f"data scale: {self.length}")
 
@@ -29,7 +34,9 @@ class WebVid10M(Dataset):
         self.sample_stride = sample_stride
         self.sample_n_frames = sample_n_frames
         self.is_image = is_image
-
+        self.frozen_videos = frozen_videos
+        if self.frozen_videos:
+            print("Training with Frozen videos")
         sample_size = (
             tuple(sample_size)
             if not isinstance(sample_size, int)
@@ -57,7 +64,6 @@ class WebVid10M(Dataset):
         video_dir = os.path.join(self.video_folder, f"{videoid}.mp4")
         video_reader = VideoReader(video_dir)
         video_length = len(video_reader)
-
         if not self.is_image:
             clip_length = min(
                 video_length, (self.sample_n_frames - 1) * self.sample_stride + 1
@@ -69,11 +75,26 @@ class WebVid10M(Dataset):
         else:
             batch_index = [random.randint(0, video_length - 1)]
 
-        pixel_values = (
-            torch.from_numpy(video_reader.get_batch(batch_index).asnumpy())
-            .permute(0, 3, 1, 2)
-            .contiguous()
-        )
+        if self.frozen_videos:
+            pixel_values = (
+                torch.from_numpy(
+                    np.tile(
+                        np.expand_dims(
+                            video_reader.get_batch(batch_index).asnumpy()[0], axis=0
+                        ),
+                        (len(batch_index), 1, 1, 1),
+                    )
+                )
+                .permute(0, 3, 1, 2)
+                .contiguous()
+            )
+        else:
+            pixel_values = (
+                torch.from_numpy(video_reader.get_batch(batch_index).asnumpy())
+                .permute(0, 3, 1, 2)
+                .contiguous()
+            )
+
         pixel_values = pixel_values / 255.0
         del video_reader
 
@@ -90,7 +111,6 @@ class WebVid10M(Dataset):
             try:
                 pixel_values, name = self.get_batch(idx)
                 break
-
             except Exception as e:
                 idx = random.randint(0, self.length - 1)
 

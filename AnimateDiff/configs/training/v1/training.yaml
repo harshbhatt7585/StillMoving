@@ -43,10 +43,17 @@ validation_data:
   num_inference_steps: 25
   guidance_scale: 8.
 
+# trainable_modules:
+#   - "q_lora."
+#   - "k_lora."
+#   - "v_lora."
+
 trainable_modules:
-  - "q_lora."
-  - "k_lora."
-  - "v_lora."
+  - "attn1_lora."
+  - "attn2_lora."
+
+motion_adapater_ckpt: "./outputs/training-2024-07-26T18-17-51/checkpoints/checkpoint.ckpt"
+
 
 unet_checkpoint_path: ""
 
@@ -54,9 +61,9 @@ learning_rate:    1.e-4
 train_batch_size: 4
 
 max_train_epoch:      -1
-max_train_steps:      100
+max_train_steps:      5
 checkpointing_epochs: -1
-checkpointing_steps:  60
+checkpointing_steps:  5
 
 validation_steps:       5000
 validation_steps_tuple: [2, 50]

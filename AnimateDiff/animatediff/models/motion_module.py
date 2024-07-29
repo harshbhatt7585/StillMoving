@@ -60,7 +60,6 @@ class MotionAdapter(nn.Module):
         self.scale = value
 
     def forward(self, x):
-        print(self.scale)
         return self.up(self.down(x)) * self.scale
 
 
@@ -92,7 +91,6 @@ class VanillaTemporalModule(nn.Module):
         motion_adapter_scale=1.0,
     ):
         super().__init__()
-        print("Motion Adapter Scale", motion_adapter_scale)
         self.temporal_transformer = TemporalTransformer3DModel(
             in_channels=in_channels,
             num_attention_heads=num_attention_heads,
