@@ -34,6 +34,7 @@ def get_down_block(
     use_motion_module=None,
     motion_module_type=None,
     motion_module_kwargs=None,
+    use_spatial_adapter=False,
 ):
     down_block_type = (
         down_block_type[7:]
@@ -85,6 +86,7 @@ def get_down_block(
             use_motion_module=use_motion_module,
             motion_module_type=motion_module_type,
             motion_module_kwargs=motion_module_kwargs,
+            use_spatial_adapter=use_spatial_adapter,
         )
     raise ValueError(f"{down_block_type} does not exist.")
 
@@ -113,6 +115,7 @@ def get_up_block(
     use_motion_module=None,
     motion_module_type=None,
     motion_module_kwargs=None,
+    use_spatial_adapter=False,
 ):
     up_block_type = (
         up_block_type[7:] if up_block_type.startswith("UNetRes") else up_block_type
@@ -162,6 +165,7 @@ def get_up_block(
             use_motion_module=use_motion_module,
             motion_module_type=motion_module_type,
             motion_module_kwargs=motion_module_kwargs,
+            use_spatial_adapter=use_spatial_adapter,
         )
     raise ValueError(f"{up_block_type} does not exist.")
 
@@ -190,6 +194,7 @@ class UNetMidBlock3DCrossAttn(nn.Module):
         use_motion_module=None,
         motion_module_type=None,
         motion_module_kwargs=None,
+        use_spatial_adapter=False,
     ):
         super().__init__()
 
@@ -233,6 +238,7 @@ class UNetMidBlock3DCrossAttn(nn.Module):
                     upcast_attention=upcast_attention,
                     unet_use_cross_frame_attention=unet_use_cross_frame_attention,
                     unet_use_temporal_attention=unet_use_temporal_attention,
+                    use_spatial_adapter=use_spatial_adapter,
                 )
             )
             motion_modules.append(
@@ -314,6 +320,7 @@ class CrossAttnDownBlock3D(nn.Module):
         use_motion_module=None,
         motion_module_type=None,
         motion_module_kwargs=None,
+        use_spatial_adapter=False,
     ):
         super().__init__()
         resnets = []
@@ -355,6 +362,7 @@ class CrossAttnDownBlock3D(nn.Module):
                     upcast_attention=upcast_attention,
                     unet_use_cross_frame_attention=unet_use_cross_frame_attention,
                     unet_use_temporal_attention=unet_use_temporal_attention,
+                    use_spatial_adapter=use_spatial_adapter,
                 )
             )
             motion_modules.append(
@@ -594,6 +602,7 @@ class CrossAttnUpBlock3D(nn.Module):
         use_motion_module=None,
         motion_module_type=None,
         motion_module_kwargs=None,
+        use_spatial_adapter=False,
     ):
         super().__init__()
         resnets = []
@@ -637,6 +646,7 @@ class CrossAttnUpBlock3D(nn.Module):
                     upcast_attention=upcast_attention,
                     unet_use_cross_frame_attention=unet_use_cross_frame_attention,
                     unet_use_temporal_attention=unet_use_temporal_attention,
+                    use_spatial_adapter=use_spatial_adapter,
                 )
             )
             motion_modules.append(

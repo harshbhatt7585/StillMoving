@@ -63,19 +63,6 @@ class MotionAdapter(nn.Module):
         return self.up(self.down(x)) * self.scale
 
 
-# class LoRALinear(nn.Module):
-#     def __init__(self, linear_layer, rank=4):
-#         super().__init__()
-#         self.in_features = linear_layer.in_features
-#         self.out_features = linear_layer.out_features
-
-#         self.linear = linear_layer
-#         self.lora = LoRALayer(self.in_features, self.out_features, rank=rank)
-
-#     def forward(self, x):
-#         return self.lienar(x) + self.lora(x)
-
-
 class VanillaTemporalModule(nn.Module):
     def __init__(
         self,
@@ -88,6 +75,7 @@ class VanillaTemporalModule(nn.Module):
         temporal_position_encoding_max_len=24,
         temporal_attention_dim_div=1,
         zero_initialize=True,
+        use_motion_adapter=False,
         motion_adapter_scale=1.0,
     ):
         super().__init__()
@@ -102,6 +90,7 @@ class VanillaTemporalModule(nn.Module):
             cross_frame_attention_mode=cross_frame_attention_mode,
             temporal_position_encoding=temporal_position_encoding,
             temporal_position_encoding_max_len=temporal_position_encoding_max_len,
+            use_motion_adapter=use_motion_adapter,
             motion_adapter_scale=motion_adapter_scale,
         )
 
@@ -147,6 +136,7 @@ class TemporalTransformer3DModel(nn.Module):
         cross_frame_attention_mode=None,
         temporal_position_encoding=False,
         temporal_position_encoding_max_len=24,
+        use_motion_adapter=False,
         motion_adapter_scale=1.0,
     ):
         super().__init__()
@@ -174,6 +164,7 @@ class TemporalTransformer3DModel(nn.Module):
                     cross_frame_attention_mode=cross_frame_attention_mode,
                     temporal_position_encoding=temporal_position_encoding,
                     temporal_position_encoding_max_len=temporal_position_encoding_max_len,
+                    use_motion_adapter=use_motion_adapter,
                     motion_adapter_scale=motion_adapter_scale,
                 )
                 for d in range(num_layers)
@@ -239,6 +230,7 @@ class TemporalTransformerBlock(nn.Module):
         cross_frame_attention_mode=None,
         temporal_position_encoding=False,
         temporal_position_encoding_max_len=24,
+        use_motion_adapter=False,
         motion_adapter_scale=1.0,
     ):
         super().__init__()
@@ -262,6 +254,7 @@ class TemporalTransformerBlock(nn.Module):
                     cross_frame_attention_mode=cross_frame_attention_mode,
                     temporal_position_encoding=temporal_position_encoding,
                     temporal_position_encoding_max_len=temporal_position_encoding_max_len,
+                    use_motion_adapter=use_motion_adapter,
                     motion_adapter_scale=motion_adapter_scale,
                 )
             )
@@ -326,6 +319,7 @@ class VersatileAttention(CrossAttention):
         cross_frame_attention_mode=None,
         temporal_position_encoding=False,
         temporal_position_encoding_max_len=24,
+        use_motion_adapter=False,
         motion_adapter_scale=1.0,
         *args,
         **kwargs,
@@ -335,6 +329,7 @@ class VersatileAttention(CrossAttention):
 
         self.attention_mode = attention_mode
         self.is_cross_attention = kwargs["cross_attention_dim"] is not None
+        self.use_motion_adapter = use_motion_adapter
 
         self.pos_encoder = (
             PositionalEncoding(
@@ -345,12 +340,14 @@ class VersatileAttention(CrossAttention):
             if (temporal_position_encoding and attention_mode == "Temporal")
             else None
         )
-
-        self.q_lora = MotionAdapter(self.to_q.in_features, self.to_q.out_features)
-        self.k_lora = MotionAdapter(self.to_k.in_features, self.to_k.out_features)
-        self.v_lora = MotionAdapter(self.to_v.in_features, self.to_v.out_features)
-
-        self.set_motion_adapter_scale(motion_adapter_scale)
+        if self.use_motion_adapter:
+            print("Using Motion Adapter")
+            self.q_lora = MotionAdapter(self.to_q.in_features, self.to_q.out_features)
+            self.k_lora = MotionAdapter(self.to_k.in_features, self.to_k.out_features)
+            self.v_lora = MotionAdapter(self.to_v.in_features, self.to_v.out_features)
+            self.set_motion_adapter_scale(motion_adapter_scale)
+        else:
+            print("Not using Motion Adapter")
 
     def set_motion_adapter_scale(self, scale):
         self.q_lora.set_scale(scale)
@@ -393,7 +390,10 @@ class VersatileAttention(CrossAttention):
                 1, 2
             )
 
-        query = self.to_q(hidden_states) + self.q_lora(hidden_states)
+        query = self.to_q(hidden_states)
+        if self.use_motion_adapter:
+            query += self.q_lora(hidden_states)
+
         dim = query.shape[-1]
         query = self.reshape_heads_to_batch_dim(query)
 
@@ -405,8 +405,12 @@ class VersatileAttention(CrossAttention):
             if encoder_hidden_states is not None
             else hidden_states
         )
-        key = self.to_k(encoder_hidden_states) + self.k_lora(encoder_hidden_states)
-        value = self.to_v(encoder_hidden_states) + self.v_lora(encoder_hidden_states)
+
+        key = self.to_k(encoder_hidden_states)
+        value = self.to_v(encoder_hidden_states)
+        if self.use_motion_adapter:
+            key += self.k_lora(encoder_hidden_states)
+            value += self.v_lora(encoder_hidden_states)
 
         key = self.reshape_heads_to_batch_dim(key)
         value = self.reshape_heads_to_batch_dim(value)

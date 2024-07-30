@@ -86,6 +86,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
         motion_module_kwargs={},
         unet_use_cross_frame_attention=False,
         unet_use_temporal_attention=False,
+        use_spatial_adapter=False,
     ):
         super().__init__()
 
@@ -157,6 +158,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
                 and (not motion_module_decoder_only),
                 motion_module_type=motion_module_type,
                 motion_module_kwargs=motion_module_kwargs,
+                use_spatial_adapter=use_spatial_adapter,
             )
             self.down_blocks.append(down_block)
 
@@ -181,6 +183,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
                 use_motion_module=use_motion_module and motion_module_mid_block,
                 motion_module_type=motion_module_type,
                 motion_module_kwargs=motion_module_kwargs,
+                use_spatial_adapter=use_spatial_adapter,
             )
         else:
             raise ValueError(f"unknown mid_block_type : {mid_block_type}")
@@ -235,6 +238,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
                 and (res in motion_module_resolutions),
                 motion_module_type=motion_module_type,
                 motion_module_kwargs=motion_module_kwargs,
+                use_spatial_adapter=use_spatial_adapter,
             )
             self.up_blocks.append(up_block)
             prev_output_channel = output_channel

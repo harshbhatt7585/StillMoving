@@ -226,8 +226,9 @@ def main(
         }
     )
     if not args.train_motion_adapter:
+        print("Loading Motion Adapter checkpoints")
         checkpoint = torch.load(
-            "/home/harshb/workspace/learnings/StillMoving/AnimateDiff/outputs/training-2024-07-29T17-53-24/checkpoints/checkpoint.ckpt",
+            motion_adapater_ckpt,
             map_location="cpu",
         )
         # Extract the state dict
@@ -264,6 +265,7 @@ def main(
     )
 
     dreambooth_model_path = "./models/DreamBooth_LoRA/alex.safetensors"
+    # dreambooth_model_path = ""
     if dreambooth_model_path != "":
         print(f"load dreambooth model from {dreambooth_model_path}")
         if dreambooth_model_path.endswith(".safetensors"):
@@ -571,6 +573,7 @@ def main(
             if is_main_process and (
                 global_step % checkpointing_steps == 0
                 or step == len(train_dataloader) - 1
+                or global_step == max_train_steps
             ):
                 save_path = os.path.join(output_dir, f"checkpoints")
 
@@ -585,18 +588,31 @@ def main(
                         "global_step": global_step,
                         "state_dict": filtered_state_dict,
                     }
-                    print("Motion Datation ckpt is getting stored")
+                    zero_rank_print("Motion Datation ckpt is getting stored")
                 else:
+                    filtered_state_dict = {
+                        k: v
+                        for k, v in unet.state_dict().items()
+                        if "attn1_lora." in k or "attn2_lora." in k
+                    }
                     state_dict = {
                         "epoch": epoch,
                         "global_step": global_step,
-                        "state_dict": unet.state_dict(),
+                        "state_dict": filtered_state_dict,
                     }
+                    zero_rank_print("Motion Datation ckpt is getting stored")
 
                 if step == len(train_dataloader) - 1:
                     torch.save(
                         state_dict,
                         os.path.join(save_path, f"checkpoint-epoch-{epoch+1}.ckpt"),
+                    )
+                elif global_step == max_train_steps:
+                    torch.save(
+                        state_dict,
+                        os.path.join(
+                            save_path, f"checkpoint-max-steps-{global_step}.ckpt"
+                        ),
                     )
                 else:
                     torch.save(state_dict, os.path.join(save_path, f"checkpoint.ckpt"))

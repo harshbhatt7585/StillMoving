@@ -64,6 +64,7 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
         upcast_attention: bool = False,
         unet_use_cross_frame_attention=None,
         unet_use_temporal_attention=None,
+        use_spatial_adapter=False,
     ):
         super().__init__()
         self.use_linear_projection = use_linear_projection
@@ -100,6 +101,7 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
                     upcast_attention=upcast_attention,
                     unet_use_cross_frame_attention=unet_use_cross_frame_attention,
                     unet_use_temporal_attention=unet_use_temporal_attention,
+                    use_spatial_adapter=use_spatial_adapter,
                 )
                 for d in range(num_layers)
             ]
@@ -196,13 +198,14 @@ class BasicTransformerBlock(nn.Module):
         upcast_attention: bool = False,
         unet_use_cross_frame_attention=None,
         unet_use_temporal_attention=None,
+        use_spatial_adapter=False,
     ):
         super().__init__()
         self.only_cross_attention = only_cross_attention
         self.use_ada_layer_norm = num_embeds_ada_norm is not None
         self.unet_use_cross_frame_attention = unet_use_cross_frame_attention
         self.unet_use_temporal_attention = unet_use_temporal_attention
-
+        self.use_spatial_adapter = use_spatial_adapter
         # SC-Attn
         assert unet_use_cross_frame_attention is not None
         if unet_use_cross_frame_attention:
@@ -231,7 +234,11 @@ class BasicTransformerBlock(nn.Module):
             if self.use_ada_layer_norm
             else nn.LayerNorm(dim)
         )
-        self.attn1_lora = SpatialAdapter(dim, dim)
+        if self.use_spatial_adapter:
+            print("Using Spatial Adapter")
+            self.attn1_lora = SpatialAdapter(dim, dim)
+        else:
+            print("Not using Spatial Adapter")
         # Cross-Attn
         if cross_attention_dim is not None:
             self.attn2 = CrossAttention(
@@ -243,7 +250,8 @@ class BasicTransformerBlock(nn.Module):
                 bias=attention_bias,
                 upcast_attention=upcast_attention,
             )
-            self.attn2_lora = SpatialAdapter(dim, dim)
+            if self.use_spatial_adapter:
+                self.attn2_lora = SpatialAdapter(dim, dim)
         else:
             self.attn2 = None
 
@@ -354,9 +362,9 @@ class BasicTransformerBlock(nn.Module):
                 self.attn1(norm_hidden_states, attention_mask=attention_mask)
                 + hidden_states
             )
-
-        lora_output = self.attn1_lora(attn_output)
-        hidden_states = lora_output + hidden_states
+        if self.use_spatial_adapter:
+            att1_lora_output = self.attn1_lora(attn_output)
+            hidden_states += att1_lora_output
 
         if self.attn2 is not None:
             # Cross-Attention
@@ -370,7 +378,9 @@ class BasicTransformerBlock(nn.Module):
                 encoder_hidden_states=encoder_hidden_states,
                 attention_mask=attention_mask,
             )
-            hidden_states = self.attn2_lora(attn_output) + hidden_states
+            if self.use_spatial_adapter:
+                att2_lora_output = self.attn2_lora(attn_output)
+                hidden_states += att2_lora_output
 
         # Feed-forward
         hidden_states = self.ff(self.norm3(hidden_states)) + hidden_states

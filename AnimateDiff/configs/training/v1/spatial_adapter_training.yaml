@@ -8,6 +8,7 @@ unet_additional_kwargs:
   motion_module_resolutions      : [ 1,2,4,8 ]
   unet_use_cross_frame_attention : false
   unet_use_temporal_attention    : false
+  use_spatial_adapter            : true
 
   motion_module_type: Vanilla
   motion_module_kwargs:
@@ -18,6 +19,7 @@ unet_additional_kwargs:
     temporal_position_encoding_max_len : 24
     temporal_attention_dim_div         : 1
     zero_initialize                    : true
+    use_motion_adapter                 : true 
 
 noise_scheduler_kwargs:
   num_train_timesteps: 1000
@@ -36,23 +38,20 @@ train_data:
 
 validation_data:
   prompts:
-    - "Snow rocky mountains peaks canyon. Snow blanketed rocky mountains surround and shadow deep canyons."
-    - "A drone view of celebration with Christma tree and fireworks, starry sky - background."
-    - "Robot dancing in times square."
-    - "Pacific coast, carmel by the sea ocean and waves."
+    - "ohwx man in the Snow rocky mountains. Snow blanketed rocky mountains surround and shadow deep canyons."
+    - "ohwx man reading book"
+    - "ohwx man smiling"
+    - "ohwx man walking drinking coffee"
   num_inference_steps: 25
   guidance_scale: 8.
 
-# trainable_modules:
-#   - "q_lora."
-#   - "k_lora."
-#   - "v_lora."
+
 
 trainable_modules:
   - "attn1_lora."
   - "attn2_lora."
 
-motion_adapater_ckpt: ""
+motion_adapater_ckpt: "./outputs/motion_adapter_training-2024-07-30T10-47-27/checkpoints/checkpoint-max-steps-4000.ckpt"
 
 
 unet_checkpoint_path: ""
@@ -61,11 +60,11 @@ learning_rate:    2.e-5
 train_batch_size: 1
 
 max_train_epoch:      -1
-max_train_steps:      4000
+max_train_steps:      600
 checkpointing_epochs: -1
-checkpointing_steps:  5
+checkpointing_steps:  600
 
-validation_steps:       5000
+validation_steps:       600
 validation_steps_tuple: [2, 50]
 
 global_seed: 42
