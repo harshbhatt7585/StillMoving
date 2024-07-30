@@ -7,6 +7,12 @@ This repository contains an open-source implementation of the "Still-Moving" mod
 
 Still-Moving is a novel framework for customizing text-to-video (T2V) generation models without requiring customized video data. It leverages customized text-to-image (T2I) models and adapts them for video generation, combining spatial priors from T2I models with motion priors from T2V models.
 
+
+## Progress
+I trained Motion adapter and Spatial Adapter as mentioned in the paper. <b>
+Not sure why the motion is so fast, and output is bad with customized dreambooth model
+![Alt text](./results/0.gif)
+
 ## Key Features
 
 - Customization of T2V models using only still image data
